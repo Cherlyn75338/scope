@@ -3,6 +3,13 @@ use chainlink_streams_report::report::{
     v10::ReportDataV10, v3::ReportDataV3, v7::ReportDataV7, v8::ReportDataV8, v9::ReportDataV9,
 };
 use solana_program::program::{get_return_data, invoke};
+use solana_program::{
+    instruction::{get_stack_height, TRANSACTION_LEVEL_STACK_HEIGHT},
+    pubkey,
+    sysvar::instructions::{
+        load_current_index_checked, load_instruction_at_checked, ID as SYSVAR_INSTRUCTIONS_ID,
+    },
+};
 
 use crate::{
     oracles::{
@@ -33,6 +40,10 @@ pub struct RefreshChainlinkPrice<'info> {
     #[account(mut, has_one = oracle_prices, has_one = oracle_mappings)]
     pub oracle_twaps: AccountLoader<'info, OracleTwaps>,
 
+    /// CHECK: Sysvar fixed address
+    #[account(address = SYSVAR_INSTRUCTIONS_ID)]
+    pub instruction_sysvar_account_info: AccountInfo<'info>,
+
     /// The Verifier Account stores the DON's public keys and other verification parameters.
     /// This account must match the PDA derived from the verifier program.
     /// CHECK: The account is validated by the verifier program.
@@ -52,11 +63,46 @@ pub struct RefreshChainlinkPrice<'info> {
     pub verifier_program_id: AccountInfo<'info>,
 }
 
+const COMPUTE_BUDGET_ID: Pubkey = pubkey!("ComputeBudget111111111111111111111111111111");
+
+/// Ensure that the refresh instruction is executed directly to avoid any manipulation:
+///
+/// - Check that the current instruction is executed by our program id (not in CPI).
+/// - Check that instructions preceding the refresh are compute budget instructions.
+fn check_execution_ctx(instruction_sysvar_account_info: &AccountInfo) -> Result<()> {
+    let current_index: usize = load_current_index_checked(instruction_sysvar_account_info)?.into();
+
+    // 1- Check that the current instruction is executed by our program id (not in CPI).
+    let current_ix = load_instruction_at_checked(current_index, instruction_sysvar_account_info)?;
+
+    // the current ix must be executed by our program id. otherwise, it's a CPI.
+    if crate::ID != current_ix.program_id {
+        return err!(ScopeError::RefreshInCPI);
+    }
+
+    // The current stack height must be the initial one. Otherwise, it's a CPI.
+    if get_stack_height() > TRANSACTION_LEVEL_STACK_HEIGHT {
+        return err!(ScopeError::RefreshInCPI);
+    }
+
+    // 2- Check that instructions preceding the refresh are compute budget instructions.
+    for ixn in 0..current_index {
+        let ix = load_instruction_at_checked(ixn, instruction_sysvar_account_info)?;
+        if ix.program_id != COMPUTE_BUDGET_ID {
+            return err!(ScopeError::RefreshWithUnexpectedIxs);
+        }
+    }
+
+    Ok(())
+}
+
 pub fn refresh_chainlink_price<'info>(
     ctx: Context<'_, '_, '_, 'info, RefreshChainlinkPrice<'info>>,
     token: u16,
     serialized_chainlink_report: Vec<u8>,
 ) -> Result<()> {
+    // Harden execution context as done in refresh_price_list
+    check_execution_ctx(&ctx.accounts.instruction_sysvar_account_info)?;
     // 1 - verify the report
     let program_id = ctx.accounts.verifier_program_id.key();
     let verifier_account = ctx.accounts.verifier_account.key();
@@ -85,10 +131,17 @@ pub fn refresh_chainlink_price<'info>(
         ],
     )?;
 
-    let Some((_program_id, return_data)) = get_return_data() else {
+    let Some((producer_program_id, return_data)) = get_return_data() else {
         msg!("No report data found");
         return Err(error!(ScopeError::NoChainlinkReportData));
     };
+
+    // Ensure the return data was produced by the expected Chainlink verifier program
+    require_keys_eq!(
+        producer_program_id,
+        VERIFIER_PROGRAM_ID,
+        ScopeError::InvalidChainlinkReportData
+    );
 
     // 2 - load the report and update the price
     let oracle_mappings = ctx.accounts.oracle_mappings.load()?;
