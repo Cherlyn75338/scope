@@ -1,41 +1,69 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
-use solana_transaction_status::{UiInstruction, EncodedConfirmedTransactionWithStatusMeta};
+use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Signature};
+use solana_transaction_status::{UiTransactionEncoding};
 
-const MAINNET_RPC: &str = "https://api.mainnet-beta.solana.com";
+const DEFAULT_MAINNET_RPC: &str = "https://api.mainnet-beta.solana.com";
 const VERIFIER_PID: &str = "Gt9S41PtjR58CbG9JhJ3J6vxesqrNAswbWYbLNTMZA3c";
 
-fn extract_last_program_return_line(tx: &EncodedConfirmedTransactionWithStatusMeta) -> Option<(String, usize)> {
-    let meta = tx.transaction.meta.as_ref()?;
-    let log_messages = meta.log_messages.as_ref().and_then(|v| Some(v.clone()))?;
-    // Heuristic: look for "Program return: <pid>" pattern nearest the end to infer last writer
-    for (idx, line) in log_messages.iter().enumerate().rev() {
+fn last_program_return_is_verifier(logs: &[String], verifier: &str) -> Option<bool> {
+    for line in logs.iter().rev() {
         if line.starts_with("Program return:") {
-            return Some((line.clone(), idx));
+            // Line format typically: "Program return: <program_id> <data>"
+            return Some(line.contains(verifier));
         }
     }
     None
 }
 
-fn includes_verifier(ixs: &[UiInstruction]) -> bool {
-    let verifier = VERIFIER_PID.parse::<Pubkey>().unwrap();
-    ixs.iter().any(|ix| match ix {
-        UiInstruction::Compiled(c) => {
-            // Without loaded message, we cannot map index -> pubkey here; leave as false
-            let _ = c; false
-        }
-        UiInstruction::Parsed(p) => p.program_id().map(|s| s == verifier.to_string()).unwrap_or(false),
-        _ => false,
-    })
-}
-
 fn main() -> Result<()> {
-    let _client = RpcClient::new_with_commitment(MAINNET_RPC.to_string(), CommitmentConfig::confirmed());
+    // Args: [RPC_URL] [limit]
+    let mut args = std::env::args().skip(1);
+    let rpc_url = args.next().unwrap_or_else(|| DEFAULT_MAINNET_RPC.to_string());
+    let limit: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(100);
+
+    let client = RpcClient::new_with_commitment(rpc_url.clone(), CommitmentConfig::confirmed());
     let verifier = VERIFIER_PID.parse::<Pubkey>().unwrap();
-    // Note: a full crawl would be large; here we instruct users how to run targeted queries:
-    println!("Use: solana logs or an indexer to collect recent txs involving {} and check last Program return lines.", verifier);
-    println!("This tool is a scaffold. Integrate with a logs/indexing backend (e.g., BigTable or Helius) to pull txs and confirm if any successful verify lacked a final return-data write by {}.", verifier);
+
+    println!("Scanning up to {} recent signatures for {} on {}", limit, verifier, rpc_url);
+
+    let sigs = client
+        .get_signatures_for_address_with_config(
+            &verifier,
+            solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config {
+                limit: Some(limit),
+                before: None,
+                until: None,
+                commitment: Some(CommitmentConfig::confirmed()),
+            },
+        )?;
+
+    if sigs.is_empty() {
+        return Err(anyhow!("No recent signatures found for verifier {}", verifier));
+    }
+
+    let mut total = 0usize;
+    let mut with_logs = 0usize;
+    let mut verifier_last = 0usize;
+
+    for entry in sigs {
+        let sig = entry.signature.parse::<Signature>()?;
+        let tx = client.get_transaction(&sig, UiTransactionEncoding::Json)?;
+        total += 1;
+        if let Some(meta) = tx.transaction.meta.clone() {
+            if meta.err.is_none() {
+                if let Some(logs) = meta.log_messages.map(|v| v.into_inner()) {
+                    with_logs += 1;
+                    if let Some(is_verifier) = last_program_return_is_verifier(&logs, &verifier.to_string()) {
+                        if is_verifier { verifier_last += 1; }
+                    }
+                }
+            }
+        }
+    }
+
+    println!("Checked {} txs ({} with logs). Final Program return from verifier: {}", total, with_logs, verifier_last);
+    println!("Note: If any successful tx shows a different last Program return producer than {}, verifier is not last-writer.", verifier);
     Ok(())
 }
 
