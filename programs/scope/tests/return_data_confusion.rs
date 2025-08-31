@@ -147,18 +147,28 @@ async fn init_scope_with_chainlink_mapping(
 	let (config_pda, _bump) = scope::utils::pdas::config_pubkey(feed_name);
 	// Create accounts
 	let rent = 10_000_000_000;
-	let mut tx = Transaction::new_with_payer(
-		&[
-			// config account owned by verifier
-			system_instruction::create_account(&payer.pubkey(), &config_account.pubkey(), 1_000_000, 0, &VERIFIER_PROGRAM_ID),
-			system_instruction::create_account(&payer.pubkey(), &token_metadatas.pubkey(), rent, (8 + scope::utils::consts::TOKEN_METADATA_SIZE) as u64, &scope_program_id),
-			system_instruction::create_account(&payer.pubkey(), &oracle_twaps.pubkey(), rent, (8 + scope::utils::consts::ORACLE_TWAPS_SIZE) as u64, &scope_program_id),
-			system_instruction::create_account(&payer.pubkey(), &oracle_prices.pubkey(), rent, (8 + scope::utils::consts::ORACLE_PRICES_SIZE) as u64, &scope_program_id),
-			system_instruction::create_account(&payer.pubkey(), &oracle_mappings.pubkey(), rent, (8 + scope::utils::consts::ORACLE_MAPPING_SIZE) as u64, &scope_program_id),
-		],
+	let create_ixs = vec![
+		// config account owned by verifier
+		system_instruction::create_account(&payer.pubkey(), &config_account.pubkey(), 1_000_000, 0, &VERIFIER_PROGRAM_ID),
+		system_instruction::create_account(&payer.pubkey(), &token_metadatas.pubkey(), rent, (8 + scope::utils::consts::TOKEN_METADATA_SIZE) as u64, &scope_program_id),
+		system_instruction::create_account(&payer.pubkey(), &oracle_twaps.pubkey(), rent, (8 + scope::utils::consts::ORACLE_TWAPS_SIZE) as u64, &scope_program_id),
+		system_instruction::create_account(&payer.pubkey(), &oracle_prices.pubkey(), rent, (8 + scope::utils::consts::ORACLE_PRICES_SIZE) as u64, &scope_program_id),
+		system_instruction::create_account(&payer.pubkey(), &oracle_mappings.pubkey(), rent, (8 + scope::utils::consts::ORACLE_MAPPING_SIZE) as u64, &scope_program_id),
+	];
+	let signer_refs: Vec<&Keypair> = vec![
+		payer,
+		&config_account,
+		&token_metadatas,
+		&oracle_twaps,
+		&oracle_prices,
+		&oracle_mappings,
+	];
+	let tx = Transaction::new_signed_with_payer(
+		&create_ixs,
 		Some(&payer.pubkey()),
+		signer_refs.as_slice(),
+		*recent_blockhash,
 	);
-	tx.sign(&[payer], *recent_blockhash);
 	banks_client.process_transaction(tx).await.unwrap();
 	*recent_blockhash = banks_client.get_latest_blockhash().await.unwrap();
 	// Initialize scope
