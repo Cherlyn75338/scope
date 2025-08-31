@@ -83,4 +83,8 @@ flashtrade-perp-itf = { path = "../flashtrade-perp-itf", features = ["no-entrypo
 solana-program-test = "1.16.27"
 solana-sdk = "1.16.27"
 tokio = { version = "1.32", features = ["macros", "rt-multi-thread"] }
+solana-client = "1.16.27"
+solana-transaction-status = "1.16.27"
+anyhow = "1.0"
+hex = "0.4"
 
