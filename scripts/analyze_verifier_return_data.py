@@ -4,7 +4,7 @@ import sys
 import time
 import json
 import base64
-import requests
+import urllib.request
 
 VERIFIER_PROGRAM = "Gt9S41PtjR58CbG9JhJ3J6vxesqrNAswbWYbLNTMZA3c"
 
@@ -12,10 +12,10 @@ RPC_URL = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 
 
 def rpc(method, params):
-    body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    r = requests.post(RPC_URL, json=body, timeout=30)
-    r.raise_for_status()
-    j = r.json()
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    req = urllib.request.Request(RPC_URL, data=body, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        j = json.loads(resp.read().decode())
     if "error" in j:
         raise RuntimeError(j["error"]) 
     return j["result"]
