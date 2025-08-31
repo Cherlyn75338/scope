@@ -10,7 +10,8 @@ members = [
     "programs/jup-perp-itf",
     "programs/lb-clmm-itf",
     "programs/redstone-itf",
-    "programs/sbod-itf"
+    "programs/sbod-itf",
+    "tools/verifier-probe"
 ]
 resolver = "2"
 
