@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import json
+import os
 import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.request import Request, urlopen
 
 
-RPC_URL = "https://api.mainnet-beta.solana.com"
+RPC_URL = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
 VERIFIER_PROGRAM_ID = "Gt9S41PtjR58CbG9JhJ3J6vxesqrNAswbWYbLNTMZA3c"
 
 
@@ -94,11 +95,19 @@ def analyze_transactions(signatures: List[str]) -> None:
         "single_ix_success_return_program_match": 0,
         "single_ix_success_no_return_data": 0,
         "single_ix_success_return_program_mismatch": 0,
+        # CPI path via log detection
+        "cpi_success": 0,
+        "cpi_success_return_program_match": 0,
+        "cpi_success_no_return_data": 0,
+        "cpi_success_return_program_mismatch": 0,
     }
     examples = {
         "no_return_data": [],
         "mismatch": [],
         "match": [],
+        "cpi_no_return_data": [],
+        "cpi_mismatch": [],
+        "cpi_match": [],
     }
 
     for i, sig in enumerate(signatures):
@@ -122,9 +131,7 @@ def analyze_transactions(signatures: List[str]) -> None:
         single_ix_to_verifier = len(instructions) == 1 and verifier_invoked
 
         # Check log success for verifier
-        verifier_log_success = any(
-            (f"Program {VERIFIER_PROGRAM_ID} success" in line) for line in logs
-        )
+        verifier_log_success = any((f"Program {VERIFIER_PROGRAM_ID} success" in line) for line in logs)
 
         if single_ix_to_verifier and success and verifier_log_success:
             stats["single_ix_success"] += 1
@@ -143,6 +150,25 @@ def analyze_transactions(signatures: List[str]) -> None:
                     stats["single_ix_success_return_program_mismatch"] += 1
                     if len(examples["mismatch"]) < 10:
                         examples["mismatch"].append({"sig": sig, "rd_program": rd_prog})
+
+        # CPI path: verifier success appears in logs anywhere in the tx
+        if not single_ix_to_verifier and success and verifier_log_success:
+            stats["cpi_success"] += 1
+            rd = meta.get("returnData")
+            if not rd:
+                stats["cpi_success_no_return_data"] += 1
+                if len(examples["cpi_no_return_data"]) < 10:
+                    examples["cpi_no_return_data"].append(sig)
+            else:
+                rd_prog = rd.get("programId")
+                if rd_prog == VERIFIER_PROGRAM_ID:
+                    stats["cpi_success_return_program_match"] += 1
+                    if len(examples["cpi_match"]) < 10:
+                        examples["cpi_match"].append(sig)
+                else:
+                    stats["cpi_success_return_program_mismatch"] += 1
+                    if len(examples["cpi_mismatch"]) < 10:
+                        examples["cpi_mismatch"].append({"sig": sig, "rd_program": rd_prog})
 
         # be polite to the public RPC
         if (i + 1) % 10 == 0:
@@ -164,6 +190,21 @@ def analyze_transactions(signatures: List[str]) -> None:
     if examples["mismatch"]:
         print("Examples: single-instruction success with returnData program mismatch:")
         for e in examples["mismatch"]:
+            print(f"  {e['sig']} -> returnData.programId={e['rd_program']}")
+        print()
+    if examples["cpi_match"]:
+        print("Examples: CPI success with verifier as final return-data program:")
+        for s in examples["cpi_match"]:
+            print(f"  {s}")
+        print()
+    if examples["cpi_no_return_data"]:
+        print("Examples: CPI success with NO final returnData:")
+        for s in examples["cpi_no_return_data"]:
+            print(f"  {s}")
+        print()
+    if examples["cpi_mismatch"]:
+        print("Examples: CPI success with final returnData program mismatch:")
+        for e in examples["cpi_mismatch"]:
             print(f"  {e['sig']} -> returnData.programId={e['rd_program']}")
 
 
