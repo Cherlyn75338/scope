@@ -288,7 +288,7 @@ pub fn refresh_chainlink_price<'info>(
     // 2 - load the report and update the price using raw byte access to avoid host alignment
     use chainlink_streams_report::feed_id::ID as FeedID;
     use chainlink_streams_report::report::v3::ReportDataV3;
-    use num_traits::ToPrimitive;
+    use num_bigint::Sign;
     let chainlink_report = ReportDataV3::decode(&return_data)
         .map_err(|_| error!(ScopeError::InvalidChainlinkReportData))?;
     let token_idx: usize = token.into();
@@ -309,11 +309,15 @@ pub fn refresh_chainlink_price<'info>(
         let dated_price_size = 16usize + 8usize + 8usize + 24usize; // Price{u64,u64}+last_slot+ts+generic
         let entry_base = prices_array_base + token_idx * dated_price_size;
         // value (u64) at +0
-        let price_value: u128 = chainlink_report
-            .benchmark_price
-            .to_u128()
-            .unwrap_or_else(|| chainlink_report.benchmark_price.to_i128().unwrap_or(0) as u128);
-        prices_data_ref[entry_base..entry_base + 8].copy_from_slice(&(price_value as u64).to_le_bytes());
+        let (sign, magnitude) = chainlink_report.benchmark_price.to_bytes_le();
+        let mut price_value_u128: u128 = 0;
+        if sign != Sign::Minus {
+            let take_len = core::cmp::min(16, magnitude.len());
+            for i in 0..take_len {
+                price_value_u128 |= (magnitude[i] as u128) << (i * 8);
+            }
+        }
+        prices_data_ref[entry_base..entry_base + 8].copy_from_slice(&(price_value_u128 as u64).to_le_bytes());
         // exp (u64) at +8 -> use 18 as Chainlink decimals proxy in tests
         prices_data_ref[entry_base + 8..entry_base + 16].copy_from_slice(&(18u64).to_le_bytes());
         // last_updated_slot left as-is; unix_timestamp at +24

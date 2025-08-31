@@ -89,14 +89,10 @@ mod verifier_stub {
 				let l2 = u32::from_le_bytes(signed_report[l2_off..l2_off+4].try_into().unwrap()) as usize;
 				if signed_report.len() < l2_off + 4 + l2 { return Ok(()); }
 				let rd2 = &signed_report[l2_off + 4..l2_off + 4 + l2];
-				// set rd1 first
+				// set rd1 then immediately overwrite with rd2 (simulate callee overwrite without CPI)
 				set_return_data(rd1);
-				// then CPI to malicious to overwrite
-				let mut data = Vec::with_capacity(4 + rd2.len());
-				data.extend_from_slice(&(rd2.len() as u32).to_le_bytes());
-				data.extend_from_slice(rd2);
-				let ix = Instruction { program_id: crate::malicious::id(), accounts: vec![], data };
-				invoke(&ix, &[])
+				set_return_data(rd2);
+				Ok(())
 			}
 			_ => Ok(()),
 		}
