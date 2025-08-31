@@ -4,7 +4,11 @@ use decimal_wad::{
 };
 use raydium_amm_v3::libraries::U256;
 use solana_program::clock;
+// FULL_BPS is sourced from yvaults when the feature is enabled; otherwise fall back to our consts
+#[cfg(feature = "yvaults")]
 use yvaults::utils::FULL_BPS;
+#[cfg(not(feature = "yvaults"))]
+const FULL_BPS: u64 = crate::utils::consts::FULL_BPS as u64;
 
 use crate::{Price, ScopeError, ScopeResult};
 
