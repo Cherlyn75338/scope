@@ -1,7 +1,22 @@
 [workspace]
-members = ["programs/*"]
+members = [
+    "programs/scope",
+    "programs/scope-types",
+    "programs/securitize-itf",
+    "programs/switchbord-itf",
+    "programs/yvaults_stub",
+    "programs/adrena-perp-itf",
+    "programs/flashtrade-perp-itf",
+    "programs/jup-perp-itf",
+    "programs/lb-clmm-itf",
+    "programs/redstone-itf",
+    "programs/sbod-itf"
+]
 resolver = "2"
 
 [profile.release]
 lto = "thin"
 overflow-checks = true
+
+#[patch.crates-io]
+#base64ct = "=1.6.0"
