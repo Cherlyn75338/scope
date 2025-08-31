@@ -29,6 +29,9 @@ mainnet = []
 staging = []
 serde = ["dep:serde"]
 
+# Host-only test mode to bypass AccountLoader alignment in program-test
+host_test = []
+
 [dependencies]
 anchor-lang = "0.28.0"
 anchor-spl = "0.28.0"
