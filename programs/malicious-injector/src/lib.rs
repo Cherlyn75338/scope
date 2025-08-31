@@ -10,11 +10,13 @@ pub mod malicious_injector {
 
     pub fn set_return_data_only(_ctx: Context<Ctx>, ix_data: Vec<u8>) -> Result<()> {
         set_return_data(&ix_data);
+        msg!("injector: set_return_data_only len={}", ix_data.len());
         Ok(())
     }
 
     pub fn inject_then_cpi(_ctx: Context<Ctx>, target_program: Pubkey, ix_data: Vec<u8>, metas: Vec<AccountMetaSerde>) -> Result<()> {
         set_return_data(&ix_data);
+        msg!("injector: set_return_data len={}", ix_data.len());
         let metas_vec: Vec<AccountMeta> = metas.into_iter().map(|m| {
             if m.is_writable { AccountMeta::new(m.pubkey, m.is_signer) } else { AccountMeta::new_readonly(m.pubkey, m.is_signer) }
         }).collect();

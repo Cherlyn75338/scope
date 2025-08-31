@@ -16,6 +16,7 @@ pub mod scope_harness {
         if data.is_empty() {
             return err!(ErrorCode::InvalidReport);
         }
+        msg!("harness: consumed return data, len={}", data.len());
         Ok(())
     }
 }
