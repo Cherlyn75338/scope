@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 RPC_URL = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
 VERIFIER_PROGRAM_ID = "Gt9S41PtjR58CbG9JhJ3J6vxesqrNAswbWYbLNTMZA3c"
+SCOPE_PROGRAM_ID = os.environ.get("SCOPE_PROGRAM_ID")  # Set to Kamino Scope program id to target Scope calls
 
 
 def rpc_call(method: str, params: Any, timeout: int = 20) -> Any:
@@ -100,6 +101,17 @@ def analyze_transactions(signatures: List[str]) -> None:
         "cpi_success_return_program_match": 0,
         "cpi_success_no_return_data": 0,
         "cpi_success_return_program_mismatch": 0,
+        # Scope-targeted path (top-level ix program == SCOPE_PROGRAM_ID and inner ix to verifier)
+        "scope_calls": 0,
+        "scope_verifier_cpi_success": 0,
+        "scope_verifier_cpi_return_program_match": 0,
+        "scope_verifier_cpi_no_return_data": 0,
+        "scope_verifier_cpi_return_program_mismatch": 0,
+        # Auto-detected Scope-like (top-level ix that inner-calls verifier and logs include refresh+chainlink)
+        "auto_scope_calls": 0,
+        "auto_scope_return_program_match": 0,
+        "auto_scope_no_return_data": 0,
+        "auto_scope_return_program_mismatch": 0,
     }
     examples = {
         "no_return_data": [],
@@ -108,7 +120,14 @@ def analyze_transactions(signatures: List[str]) -> None:
         "cpi_no_return_data": [],
         "cpi_mismatch": [],
         "cpi_match": [],
+        "scope_match": [],
+        "scope_no_return_data": [],
+        "scope_mismatch": [],
+        "auto_scope_match": [],
+        "auto_scope_no_return_data": [],
+        "auto_scope_mismatch": [],
     }
+    auto_scope_program_ids: Dict[str, int] = {}
 
     for i, sig in enumerate(signatures):
         tx = get_transaction(sig)
@@ -170,6 +189,109 @@ def analyze_transactions(signatures: List[str]) -> None:
                     if len(examples["cpi_mismatch"]) < 10:
                         examples["cpi_mismatch"].append({"sig": sig, "rd_program": rd_prog})
 
+        # Scope-targeted: top-level ix to SCOPE_PROGRAM_ID, with inner ix to verifier
+        # Note: meta.innerInstructions indexes correspond to top-level instruction indices
+        # Helper: does log mention scope refresh chainlink instruction semantics
+        def logs_indicate_scope_refresh(logs_list: List[str]) -> bool:
+            for line in logs_list:
+                l = line.lower()
+                if "instruction:" in l and "refresh" in l and "chainlink" in l:
+                    return True
+            return False
+
+        if SCOPE_PROGRAM_ID:
+            # find all top-level indices where program == SCOPE_PROGRAM_ID
+            scope_tl_indices = [idx for idx, ix in enumerate(instructions) if program_id_for_ix(ix, keys) == SCOPE_PROGRAM_ID]
+            for tl_idx in scope_tl_indices:
+                stats["scope_calls"] += 1
+                inner_list = (meta.get("innerInstructions") or [])
+                # find inner instructions under this top-level index
+                inner_for_idx: List[Dict[str, Any]] = []
+                for inner in inner_list:
+                    if inner.get("index") == tl_idx:
+                        inner_for_idx = inner.get("instructions") or []
+                        break
+                # resolve program ids for inner instructions
+                inner_has_verifier = False
+                for iix in inner_for_idx:
+                    # inner instruction encoding uses programIdIndex
+                    pid = None
+                    if "programIdIndex" in iix:
+                        try:
+                            idx = int(iix["programIdIndex"])
+                            if 0 <= idx < len(keys):
+                                pid = keys[idx]
+                        except Exception:
+                            pid = None
+                    elif "programId" in iix:
+                        pid = iix["programId"]
+                    if pid == VERIFIER_PROGRAM_ID:
+                        inner_has_verifier = True
+                        break
+                if inner_has_verifier and success and verifier_log_success:
+                    stats["scope_verifier_cpi_success"] += 1
+                    rd = meta.get("returnData")
+                    if not rd:
+                        stats["scope_verifier_cpi_no_return_data"] += 1
+                        if len(examples["scope_no_return_data"]) < 10:
+                            examples["scope_no_return_data"].append(sig)
+                    else:
+                        rd_prog = rd.get("programId")
+                        if rd_prog == VERIFIER_PROGRAM_ID:
+                            stats["scope_verifier_cpi_return_program_match"] += 1
+                            if len(examples["scope_match"]) < 10:
+                                examples["scope_match"].append(sig)
+                        else:
+                            stats["scope_verifier_cpi_return_program_mismatch"] += 1
+                            if len(examples["scope_mismatch"]) < 10:
+                                examples["scope_mismatch"].append({"sig": sig, "rd_program": rd_prog})
+
+        # Auto-detect Scope-like: any top-level ix with inner verifier CPI and logs show refresh+chainlink
+        # Also collect candidate program ids
+        inner_list = (meta.get("innerInstructions") or [])
+        if inner_list:
+            # map tl index to whether it calls verifier
+            tl_to_has_verifier: Dict[int, bool] = {}
+            for inner in inner_list:
+                tl_index = inner.get("index")
+                for iix in (inner.get("instructions") or []):
+                    pid = None
+                    if "programIdIndex" in iix:
+                        try:
+                            idx = int(iix["programIdIndex"])
+                            if 0 <= idx < len(keys):
+                                pid = keys[idx]
+                        except Exception:
+                            pid = None
+                    elif "programId" in iix:
+                        pid = iix["programId"]
+                    if pid == VERIFIER_PROGRAM_ID:
+                        tl_to_has_verifier[tl_index] = True
+                        break
+            if tl_to_has_verifier and logs_indicate_scope_refresh(logs):
+                for tl_idx, has_ver in tl_to_has_verifier.items():
+                    if not has_ver:
+                        continue
+                    pid = program_id_for_ix(instructions[tl_idx], keys)
+                    if pid:
+                        auto_scope_program_ids[pid] = auto_scope_program_ids.get(pid, 0) + 1
+                    stats["auto_scope_calls"] += 1
+                    rd = meta.get("returnData")
+                    if not rd:
+                        stats["auto_scope_no_return_data"] += 1
+                        if len(examples["auto_scope_no_return_data"]) < 10:
+                            examples["auto_scope_no_return_data"].append(sig)
+                    else:
+                        rd_prog = rd.get("programId")
+                        if rd_prog == VERIFIER_PROGRAM_ID:
+                            stats["auto_scope_return_program_match"] += 1
+                            if len(examples["auto_scope_match"]) < 10:
+                                examples["auto_scope_match"].append(sig)
+                        else:
+                            stats["auto_scope_return_program_mismatch"] += 1
+                            if len(examples["auto_scope_mismatch"]) < 10:
+                                examples["auto_scope_mismatch"].append({"sig": sig, "rd_program": rd_prog})
+
         # be polite to the public RPC
         if (i + 1) % 10 == 0:
             time.sleep(0.4)
@@ -206,6 +328,42 @@ def analyze_transactions(signatures: List[str]) -> None:
         print("Examples: CPI success with final returnData program mismatch:")
         for e in examples["cpi_mismatch"]:
             print(f"  {e['sig']} -> returnData.programId={e['rd_program']}")
+        print()
+    if SCOPE_PROGRAM_ID:
+        if examples["scope_match"]:
+            print("Examples: Scope tx (top-level) with verifier CPI success and verifier as final return-data program:")
+            for s in examples["scope_match"]:
+                print(f"  {s}")
+            print()
+        if examples["scope_no_return_data"]:
+            print("Examples: Scope tx (top-level) with verifier CPI success and NO final returnData:")
+            for s in examples["scope_no_return_data"]:
+                print(f"  {s}")
+            print()
+        if examples["scope_mismatch"]:
+            print("Examples: Scope tx (top-level) with verifier CPI success and final returnData program mismatch:")
+            for e in examples["scope_mismatch"]:
+                print(f"  {e['sig']} -> returnData.programId={e['rd_program']}")
+    if auto_scope_program_ids:
+        print()
+        print("Auto-detected candidate Scope program IDs (top-level ix that CPI-calls verifier and logs show refresh+chainlink):")
+        for pid, count in auto_scope_program_ids.items():
+            print(f"  {pid}: {count} txs")
+        print()
+    if examples["auto_scope_match"]:
+        print("Examples: Auto-scope tx with verifier as final return-data program:")
+        for s in examples["auto_scope_match"]:
+            print(f"  {s}")
+        print()
+    if examples["auto_scope_no_return_data"]:
+        print("Examples: Auto-scope tx with NO final returnData:")
+        for s in examples["auto_scope_no_return_data"]:
+            print(f"  {s}")
+        print()
+    if examples["auto_scope_mismatch"]:
+        print("Examples: Auto-scope tx with final returnData program mismatch:")
+        for e in examples["auto_scope_mismatch"]:
+            print(f"  {e['sig']} -> returnData.programId={e['rd_program']}")
 
 
 def main():
@@ -215,7 +373,8 @@ def main():
             limit = int(sys.argv[1])
         except Exception:
             pass
-    sigs = get_signatures_for_address(VERIFIER_PROGRAM_ID, limit=limit)
+    target_address = SCOPE_PROGRAM_ID or VERIFIER_PROGRAM_ID
+    sigs = get_signatures_for_address(target_address, limit=limit)
     if not sigs:
         print("No signatures fetched. The program may be inactive or RPC is rate-limiting.")
         sys.exit(1)
