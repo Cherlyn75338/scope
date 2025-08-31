@@ -1,0 +1,14 @@
+[package]
+name = "malicious-injector"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "malicious_injector"
+
+[dependencies]
+anchor-lang = "0.28.0"
+solana-program = ">1.16.18"
+

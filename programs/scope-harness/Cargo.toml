@@ -1,0 +1,20 @@
+[package]
+name = "scope-harness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "scope_harness"
+
+[dependencies]
+anchor-lang = "0.28.0"
+solana-program = ">1.16.18"
+
+[dev-dependencies]
+solana-program-test = "1.16"
+solana-sdk = "1.16"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+malicious-injector = { path = "../malicious-injector", package = "malicious-injector" }
+
