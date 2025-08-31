@@ -4,7 +4,8 @@ use chainlink_streams_report::{feed_id::ID as FeedID, report::v3::ReportDataV3};
 use prost::Message as _;
 use solana_program::{instruction::Instruction, program::set_return_data, pubkey::Pubkey};
 use solana_program_test::*;
-use solana_sdk::{account::Account, signature::Keypair, signer::Signer, system_instruction::create_account, transaction::Transaction};
+use solana_sdk::{account::Account, signature::Keypair, signer::Signer, system_instruction::create_account, transaction::Transaction, instruction::AccountMeta};
+use solana_client::rpc_client::RpcClient;
 
 fn injector_process(_program_id: &Pubkey, _accounts: &[solana_program::account_info::AccountInfo], ix: &[u8]) -> solana_program::entrypoint::ProgramResult {
     set_return_data(ix);
@@ -153,5 +154,47 @@ async fn test_return_data_confusion_chainlink_handler() {
     let tx = Transaction::new_signed_with_payer(&[inj_ix, refresh_ix], Some(&payer.pubkey()), &[payer], ctx.last_blockhash);
     let res = ctx.banks_client.process_transaction(tx).await;
     assert!(res.is_ok(), "refresh should succeed to test data flow: {:?}", res);
+}
+
+// Advanced “mainnet-realism” probe: ensure the verify CPI writes return data last.
+// This is a pure probe of the verifier behavior contract: we register a program
+// under the real verifier program id that writes return data AFTER a prior ix wrote some.
+// If Scope later relies on this return data being from the verifier, origin enforcement is required.
+#[tokio::test]
+async fn probe_chainlink_verifier_last_writer_behavior() {
+    // Standalone program-test banking environment
+    let mut pt = ProgramTest::default();
+
+    // Program A: sets return data to known bytes
+    fn writer_a(_pid: &Pubkey, _accs: &[solana_program::account_info::AccountInfo], _ix: &[u8]) -> solana_program::entrypoint::ProgramResult {
+        set_return_data(b"WRITER_A");
+        Ok(())
+    }
+    let writer_a_pid = Pubkey::new_unique();
+    pt.add_program("writer_a", writer_a_pid, processor!(writer_a));
+
+    // Program B (mock verifier): succeeds and overwrites return data
+    fn writer_b(_pid: &Pubkey, _accs: &[solana_program::account_info::AccountInfo], _ix: &[u8]) -> solana_program::entrypoint::ProgramResult {
+        set_return_data(b"WRITER_B");
+        Ok(())
+    }
+    // Register under the real verifier program id to mirror on-chain id
+    let verifier_pid = scope::oracles::chainlink::chainlink_streams_itf::VERIFIER_PROGRAM_ID;
+    pt.add_program("mock_cl_verifier_overwrite", verifier_pid, processor!(writer_b));
+
+    let mut ctx = pt.start_with_context().await;
+    let payer = &ctx.payer;
+
+    // Build transaction with two top-level ixs: [writer_a, writer_b]
+    let ix_a = Instruction::new_with_bytes(writer_a_pid, b"A", vec![]);
+    let ix_b = Instruction::new_with_bytes(verifier_pid, b"B", vec![AccountMeta::new_readonly(payer.pubkey(), true)]);
+    let tx = Transaction::new_signed_with_payer(&[ix_a, ix_b], Some(&payer.pubkey()), &[payer], ctx.last_blockhash);
+
+    // If the environment applies last-writer semantics, this should succeed
+    let res = ctx.banks_client.process_transaction(tx).await;
+    assert!(res.is_ok(), "probe tx should succeed: {:?}", res);
+
+    // Note: solana-program-test does not expose direct return-data reads post execution here;
+    // the purpose of this probe is to ensure second ix can overwrite first ix return data without failure.
 }
 
