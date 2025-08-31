@@ -2,6 +2,13 @@
 members = ["programs/*"]
 resolver = "2"
 
+[patch.crates-io]
+wasm-bindgen = { git = "https://github.com/rustwasm/wasm-bindgen", tag = "0.2.88" }
+wasm-bindgen-backend = { git = "https://github.com/rustwasm/wasm-bindgen", tag = "0.2.88" }
+wasm-bindgen-macro = { git = "https://github.com/rustwasm/wasm-bindgen", tag = "0.2.88" }
+wasm-bindgen-macro-support = { git = "https://github.com/rustwasm/wasm-bindgen", tag = "0.2.88" }
+wasm-bindgen-shared = { git = "https://github.com/rustwasm/wasm-bindgen", tag = "0.2.88" }
+
 [profile.release]
 lto = "thin"
 overflow-checks = true
