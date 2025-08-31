@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Signature};
-use solana_transaction_status::{UiTransactionEncoding};
+use solana_transaction_status::{UiTransactionEncoding, option_serializer::OptionSerializer};
 
 const DEFAULT_MAINNET_RPC: &str = "https://api.mainnet-beta.solana.com";
 const VERIFIER_PID: &str = "Gt9S41PtjR58CbG9JhJ3J6vxesqrNAswbWYbLNTMZA3c";
@@ -52,11 +52,14 @@ fn main() -> Result<()> {
         total += 1;
         if let Some(meta) = tx.transaction.meta.clone() {
             if meta.err.is_none() {
-                if let Some(logs) = meta.log_messages.map(|v| v.into_inner()) {
-                    with_logs += 1;
-                    if let Some(is_verifier) = last_program_return_is_verifier(&logs, &verifier.to_string()) {
-                        if is_verifier { verifier_last += 1; }
+                match meta.log_messages {
+                    OptionSerializer::Some(logs) => {
+                        with_logs += 1;
+                        if let Some(is_verifier) = last_program_return_is_verifier(&logs, &verifier.to_string()) {
+                            if is_verifier { verifier_last += 1; }
+                        }
                     }
+                    _ => {}
                 }
             }
         }
