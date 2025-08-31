@@ -11,7 +11,8 @@ members = [
     "programs/lb-clmm-itf",
     "programs/redstone-itf",
     "programs/sbod-itf",
-    "tools/verifier-probe"
+    "tools/verifier-probe",
+    "programs/return-data-injector"
 ]
 resolver = "2"
 
