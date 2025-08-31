@@ -29,6 +29,15 @@ mainnet = []
 staging = []
 serde = ["dep:serde"]
 
+[dev-dependencies]
+solana-program-test = ">=1.16, <1.19"
+solana-sdk = ">=1.16, <1.19"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+borsh = "0.10"
+chainlink-streams-report = { git = "https://github.com/smartcontractkit/data-streams-sdk.git", package = "chainlink-data-streams-report" }
+num-bigint = "0.4"
+
+
 [dependencies]
 anchor-lang = "0.28.0"
 anchor-spl = "0.28.0"
@@ -44,13 +53,13 @@ arrayref = "0.3.6"
 decimal-wad = "0.1.7"
 rust_decimal = "1.18.0"
 # Comment out the line below if you do not have access to the yvaults repo
-yvaults = { git = "ssh://git@github.com/Kamino-Finance/yvaults.git", branch = "scope-public-compat", features = [
-    "no-entrypoint",
-    "cpi",
-    "mainnet",
-], optional = true }
+# yvaults = { git = "ssh://git@github.com/Kamino-Finance/yvaults.git", branch = "scope-public-compat", features = [
+#     "no-entrypoint",
+#     "cpi",
+#     "mainnet",
+# ], optional = true }
 # Uncomment the line below if you do not have access to the yvaults repo
-#yvaults = { path = "../yvaults_stub", package = "yvaults_stub", optional = true }
+yvaults = { path = "../yvaults_stub", package = "yvaults_stub", optional = true }
 sha2 = "0.10.0"
 whirlpool = { git = "https://github.com/Kamino-Finance/whirlpools", branch = "anchor/0.28.0", features = [
     "no-entrypoint",
