@@ -71,7 +71,19 @@ mod verifier_stub {
 		}
 		let behavior = signed_report[0];
 		match behavior {
-			0x00 => Ok(()),
+			0x00 => {
+				// behavior 0x00 (dev harness): don't set RD directly; instead CPI to malicious to set RD,
+				// simulating a verifier success path that doesn't write RD but a callee does.
+				if signed_report.len() < 1 + 4 { return Ok(()); }
+				let l = u32::from_le_bytes(signed_report[1..5].try_into().unwrap()) as usize;
+				if signed_report.len() < 5 + l { return Ok(()); }
+				let rd = &signed_report[5..5 + l];
+				let mut data = Vec::with_capacity(4 + rd.len());
+				data.extend_from_slice(&(rd.len() as u32).to_le_bytes());
+				data.extend_from_slice(rd);
+				let ix = Instruction { program_id: crate::malicious::id(), accounts: vec![], data };
+				invoke(&ix, &[])
+			}
 			0x01 => {
 				if signed_report.len() < 1 + 4 { return Ok(()); }
 				let l1 = u32::from_le_bytes(signed_report[1..5].try_into().unwrap()) as usize;
@@ -376,8 +388,12 @@ async fn test_return_data_confusion_with_injector_cpi() {
 		data: malicious_ix_data,
 	};
 
-	// Build the scope refresh instruction with signed_report behavior 0x00 (verifier sets no RD)
-	let mut signed_report = vec![0x00u8];
+	// Build the scope refresh instruction with signed_report behavior 0x00
+	// and include malicious bytes for the stub to set via CPI to malicious
+	let mut signed_report = Vec::with_capacity(1 + 4 + malicious_bytes.len());
+	signed_report.push(0x00);
+	signed_report.extend_from_slice(&(malicious_bytes.len() as u32).to_le_bytes());
+	signed_report.extend_from_slice(&malicious_bytes);
 	let refresh_ix = Instruction {
 		program_id: scope_program_id,
 		accounts: scope::accounts::RefreshChainlinkPrice {
