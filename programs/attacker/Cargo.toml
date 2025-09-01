@@ -1,0 +1,12 @@
+[package]
+name = "attacker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "attacker"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+solana-program = ">1.16.18"
