@@ -23,7 +23,7 @@ jobs:
       - name: Install Solana 1.16.18
         shell: bash
         run: |
-          bash -c "$(curl -sSfL https://release.anza.xyz/v1.16.18/install)"
+          bash -c "$(curl -sSfL https://release.anza.xyz/v1.16.18/solana-install-init-x86_64-unknown-linux-gnu)"
           echo "$HOME/.local/share/solana/install/releases/1.16.18/solana-release/bin" >> $GITHUB_PATH || true
           echo "$HOME/.local/share/solana/install/releases/v1.16.18/solana-release/bin" >> $GITHUB_PATH || true
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH || true
