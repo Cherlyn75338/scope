@@ -76,3 +76,8 @@ num-bigint = "0.4"
 securitize-itf = { path = "../securitize-itf", features = ["no-entrypoint"] }
 flashtrade-perp-itf = { path = "../flashtrade-perp-itf", features = ["no-entrypoint"] }
 
+[dev-dependencies]
+solana-program-test = "1.18"
+solana-sdk = "1.18"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
