@@ -1,0 +1,19 @@
+{
+  "name": "scope-chainlink-poc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.4",
+    "borsh": "^1.0.0",
+    "bs58": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
+

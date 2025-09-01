@@ -1,0 +1,18 @@
+[package]
+name = "poc-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+borsh = "0.10"
+bs58 = "0.5"
+solana-sdk = ">=1.16.18"
+solana-client = ">=1.16.18"
+solana-transaction-status = ">=1.16.18"
+solana-account-decoder = ">=1.16.18"
+tokio = { version = "1", features = ["full"] }
+chainlink-data-streams-report = { git = "https://github.com/smartcontractkit/data-streams-sdk.git" }
+sha2 = "0.10"
+
