@@ -18,7 +18,7 @@ use solana_sdk::{
 #[tokio::test]
 async fn poc_stale_return_data_sets_arbitrary_chainlink_price_v7() {
 	// Add Scope (Anchor), Attacker (set_return_data), and Verifier (no return data)
-	let mut pt = ProgramTest::new("scope", scope::id(), None);
+	let mut pt = ProgramTest::new("scope", scope::id(), processor!(scope::entry));
 	// Register verifier under the expected program id constant used by Scope
 	pt.add_program("verifier", scope::oracles::chainlink::chainlink_streams_itf::VERIFIER_PROGRAM_ID, processor!(verifier::process_instruction));
 	// Register attacker with a random program id
