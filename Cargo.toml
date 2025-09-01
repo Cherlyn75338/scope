@@ -1,7 +1,10 @@
 [workspace]
-members = ["programs/*"]
+members = ["programs/*", "tests/poc"]
 resolver = "2"
 
 [profile.release]
 lto = "thin"
 overflow-checks = true
+
+[patch.crates-io]
+ahash = { version = "=0.8.7" }
