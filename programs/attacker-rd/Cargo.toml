@@ -1,0 +1,17 @@
+[package]
+name = "attacker-rd"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "attacker_rd"
+
+[features]
+no-entrypoint = []
+
+[dependencies]
+solana-program = ">1.16.18"
+anchor-lang = "0.28.0"
+
