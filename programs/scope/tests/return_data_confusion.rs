@@ -47,7 +47,7 @@ fn create_alloc_account(owner: &Pubkey, size: usize, lamports: u64) -> Account {
 
 mod verifier_stub {
 	use super::*;
-	use solana_program::{program::invoke, program::set_return_data};
+	use solana_program::program::set_return_data;
 	// Use the real Chainlink verifier program id so CPI from Scope succeeds
 	solana_program::declare_id!("Gt9S41PtjR58CbG9JhJ3J6vxesqrNAswbWYbLNTMZA3c");
 
@@ -72,17 +72,13 @@ mod verifier_stub {
 		let behavior = signed_report[0];
 		match behavior {
 			0x00 => {
-				// behavior 0x00 (dev harness): don't set RD directly; instead CPI to malicious to set RD,
-				// simulating a verifier success path that doesn't write RD but a callee does.
+				// behavior 0x00: set return data directly to provided bytes (no CPI)
 				if signed_report.len() < 1 + 4 { return Ok(()); }
 				let l = u32::from_le_bytes(signed_report[1..5].try_into().unwrap()) as usize;
 				if signed_report.len() < 5 + l { return Ok(()); }
 				let rd = &signed_report[5..5 + l];
-				let mut data = Vec::with_capacity(4 + rd.len());
-				data.extend_from_slice(&(rd.len() as u32).to_le_bytes());
-				data.extend_from_slice(rd);
-				let ix = Instruction { program_id: crate::malicious::id(), accounts: vec![], data };
-				invoke(&ix, &[])
+				set_return_data(rd);
+				Ok(())
 			}
 			0x01 => {
 				if signed_report.len() < 1 + 4 { return Ok(()); }
