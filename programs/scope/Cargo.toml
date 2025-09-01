@@ -21,18 +21,23 @@ tracing = ["dep:tracing"]
 
 # If none of the following is set, one will be selected based on env $CLUSTER variable
 # If $CLUSTER is not set either, default will be mainnet
-default = ["yvaults"]
+default = []
 yvaults = ["dep:yvaults"]
 devnet = ["skip_price_validation"]
 localnet = []
 mainnet = []
 staging = []
 serde = ["dep:serde"]
+pyth-lazer = [
+    "dep:pyth-lazer-solana-contract",
+    "dep:pyth-lazer-protocol",
+    "dep:pyth-solana-receiver-sdk",
+]
 
 [dependencies]
 anchor-lang = "0.28.0"
 anchor-spl = "0.28.0"
-solana-program = ">1.16.18"
+solana-program = "=1.16.18"
 bytemuck = { version = "1.4.0", features = ["min_const_generics", "derive"] }
 num_enum = "0.7.0"
 cfg-if = "1.0.0"
@@ -44,13 +49,8 @@ arrayref = "0.3.6"
 decimal-wad = "0.1.7"
 rust_decimal = "1.18.0"
 # Comment out the line below if you do not have access to the yvaults repo
-yvaults = { git = "ssh://git@github.com/Kamino-Finance/yvaults.git", branch = "scope-public-compat", features = [
-    "no-entrypoint",
-    "cpi",
-    "mainnet",
-], optional = true }
-# Uncomment the line below if you do not have access to the yvaults repo
-#yvaults = { path = "../yvaults_stub", package = "yvaults_stub", optional = true }
+# Use the local stub to avoid accessing the private yvaults repo during CI/tests
+yvaults = { path = "../yvaults_stub", package = "yvaults_stub", optional = true }
 sha2 = "0.10.0"
 whirlpool = { git = "https://github.com/Kamino-Finance/whirlpools", branch = "anchor/0.28.0", features = [
     "no-entrypoint",
@@ -64,10 +64,10 @@ redstone-itf = { path = "../redstone-itf", features = ["no-entrypoint"] }
 adrena-perp-itf = { path = "../adrena-perp-itf", features = ["no-entrypoint"] }
 pyth-lazer-solana-contract = { git = "https://github.com/Kamino-Finance/pyth-crosschain.git", branch = "lazer_on_anchor_0.29", features = [
     "no-entrypoint",
-] }
-pyth-lazer-protocol = { git = "https://github.com/Kamino-Finance/pyth-crosschain.git", branch = "lazer_on_anchor_0.29" }
+], optional = true }
+pyth-lazer-protocol = { git = "https://github.com/Kamino-Finance/pyth-crosschain.git", branch = "lazer_on_anchor_0.29", optional = true }
 intbits = "0.2.0"
-pyth-solana-receiver-sdk = "0.1.0"
+pyth-solana-receiver-sdk = { version = "0.1.0", optional = true }
 static_assertions = "1.1.0"
 tracing = { version = "0.1.10", optional = true }
 # Chainlink Streams
@@ -77,7 +77,7 @@ securitize-itf = { path = "../securitize-itf", features = ["no-entrypoint"] }
 flashtrade-perp-itf = { path = "../flashtrade-perp-itf", features = ["no-entrypoint"] }
 
 [dev-dependencies]
-solana-program-test = "1.18"
-solana-sdk = "1.18"
+solana-program-test = "=1.16.18"
+solana-sdk = "=1.16.18"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
