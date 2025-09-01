@@ -1,0 +1,14 @@
+[package]
+name = "verifier-stub"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "verifier_stub"
+
+[dependencies]
+anchor-lang = "0.28.0"
+solana-program = ">1.16.18"
+

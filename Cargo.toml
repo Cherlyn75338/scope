@@ -5,3 +5,6 @@ resolver = "2"
 [profile.release]
 lto = "thin"
 overflow-checks = true
+
+[patch.crates-io]
+base64ct = "=1.6.0"
