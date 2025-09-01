@@ -117,11 +117,10 @@ async fn create_program_owned_account(
 
 #[tokio::test]
 async fn poc_pre_write_last_writer_wins() {
-    let mut pt = ProgramTest::new(
-        "scope",
-        scope_program::id(),
-        processor!(scope_program::entry),
-    );
+    // Ensure ProgramTest loads the BPF .so for `scope` to avoid host alignment issues
+    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
+    std::env::set_var("BPF_OUT_DIR", format!("{}/deploy", target_dir));
+    let mut pt = ProgramTest::new("scope", scope_program::id(), None);
 
     // Register mock verifier under the real VERIFIER_PROGRAM_ID and the attacker writer
     pt.add_program("mock_verifier", VERIFIER_PROGRAM_ID, processor!(mock_verifier_process_instruction));
@@ -275,11 +274,10 @@ async fn poc_pre_write_last_writer_wins() {
 
 #[tokio::test]
 async fn poc_cpi_overwrite_inside_verifier() {
-    let mut pt = ProgramTest::new(
-        "scope",
-        scope_program::id(),
-        processor!(scope_program::entry),
-    );
+    // Ensure ProgramTest loads the BPF .so for `scope` to avoid host alignment issues
+    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
+    std::env::set_var("BPF_OUT_DIR", format!("{}/deploy", target_dir));
+    let mut pt = ProgramTest::new("scope", scope_program::id(), None);
 
     pt.add_program("mock_verifier", VERIFIER_PROGRAM_ID, processor!(mock_verifier_process_instruction));
     pt.add_program(
