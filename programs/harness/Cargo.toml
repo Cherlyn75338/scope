@@ -1,0 +1,16 @@
+[package]
+name = "harness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "harness"
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "0.28.0"
+solana-program = ">1.16.18"
+scope = { path = "../scope", features = ["devnet", "no-entrypoint"] }
+rd-setter = { path = "../rd-setter", package = "rd-setter" }
+
