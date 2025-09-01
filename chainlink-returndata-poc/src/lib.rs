@@ -45,6 +45,20 @@ pub fn process_instruction(
         }
     } else if *program_id == SCOPE_ID {
         match instruction_data {
+            b"scope_ro" => {
+                // Read whatever the last writer set, without CPI
+                if let Some((pid, data)) = get_return_data() {
+                    sol_log(&format!(
+                        "scope_ro got pid={} data={}",
+                        pid,
+                        core::str::from_utf8(&data).unwrap_or("<nonutf8>")
+                    ));
+                    if pid != WRITER_ID { return Err(ProgramError::Custom(20)); }
+                    Ok(())
+                } else {
+                    return Err(ProgramError::Custom(21));
+                }
+            }
             b"scope_cpi_a" => {
                 // accounts[0] = writer program account, accounts[1] = verifier program account
                 let writer_ai = &_accounts[0];
@@ -147,5 +161,36 @@ mod tests {
             recent_blockhash2,
         );
         banks_client.process_transaction(tx_b).await.expect("scope_b should succeed");
+
+        // Scenario C (unguarded preceding instruction): attacker sets data in a prior ix; scope reads without CPI
+        let recent_blockhash3 = banks_client.get_latest_blockhash().await.unwrap();
+        let ix_writer_pre = solana_sdk::instruction::Instruction { program_id: WRITER_ID, accounts: vec![], data: b"attacker".to_vec() };
+        let ix_scope_ro = solana_sdk::instruction::Instruction { program_id: SCOPE_ID, accounts: vec![], data: b"scope_ro".to_vec() };
+        let tx_c = Transaction::new_signed_with_payer(
+            &[ix_writer_pre, ix_scope_ro],
+            Some(&payer.pubkey()),
+            &[&payer],
+            recent_blockhash3,
+        );
+        banks_client.process_transaction(tx_c).await.expect("scope_ro should succeed and observe writer");
+
+        // Scenario D (preceding attacker but verifier overwrites inside scope): still safe
+        let recent_blockhash4 = banks_client.get_latest_blockhash().await.unwrap();
+        let ix_writer_pre2 = solana_sdk::instruction::Instruction { program_id: WRITER_ID, accounts: vec![], data: b"attacker".to_vec() };
+        let ix_scope_a2 = solana_sdk::instruction::Instruction {
+            program_id: SCOPE_ID,
+            accounts: vec![
+                solana_sdk::instruction::AccountMeta::new_readonly(WRITER_ID, false),
+                solana_sdk::instruction::AccountMeta::new_readonly(VERIFIER_ID, false),
+            ],
+            data: b"scope_cpi_a".to_vec(),
+        };
+        let tx_d = Transaction::new_signed_with_payer(
+            &[ix_writer_pre2, ix_scope_a2],
+            Some(&payer.pubkey()),
+            &[&payer],
+            recent_blockhash4,
+        );
+        banks_client.process_transaction(tx_d).await.expect("preceding writer should be overwritten by verifier inside scope");
     }
 }
