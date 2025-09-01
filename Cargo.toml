@@ -5,3 +5,6 @@ resolver = "2"
 [profile.release]
 lto = "thin"
 overflow-checks = true
+
+[patch.crates-io]
+# Leave empty; will not override crates.io in this workspace

@@ -6,7 +6,6 @@ use anchor_lang::InstructionData;
 use anchor_lang::ToAccountMetas;
 use chainlink_streams_report::feed_id::ID as ChainlinkFeedID;
 use chainlink_streams_report::report::v7::ReportDataV7;
-use prost::Message as _;
 use scope::oracles::chainlink::chainlink_streams_itf::{
     self as chainlink_itf, VERIFIER_CONFIG_PUBKEY, VERIFIER_PROGRAM_ID,
 };
@@ -17,7 +16,7 @@ use solana_program::pubkey::Pubkey;
 use solana_program::sysvar;
 use solana_program_test::{processor, ProgramTest};
 use solana_sdk::account::Account;
-use solana_sdk::instruction::{AccountMeta, Instruction};
+use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::system_program;
 use solana_sdk::transaction::Transaction;
@@ -71,18 +70,17 @@ fn mock_verifier_process_instruction(
 }
 
 fn build_chainlink_v7_report_bytes(feed: Pubkey, observations_ts: u64, exchange_rate_1e18: u128) -> Vec<u8> {
-    // Build a minimal v7 report and prost-encode it
+    // Chainlink Reports crate exposes ABI encoding helpers
     let report = ReportDataV7 {
-        // feed_id is 32-byte array within the Chainlink type
         feed_id: ChainlinkFeedID(feed.to_bytes()),
-        observations_timestamp: observations_ts.into(),
+        observations_timestamp: (observations_ts as u32),
         exchange_rate: num_bigint::BigInt::from(exchange_rate_1e18),
-        // Unused/optional fields defaulted by struct literal completion
-        ..Default::default()
+        valid_from_timestamp: 0u32,
+        expires_at: u32::MAX,
+        link_fee: num_bigint::BigInt::from(0u32),
+        native_fee: num_bigint::BigInt::from(0u32),
     };
-    let mut out = Vec::with_capacity(report.encoded_len());
-    report.encode(&mut out).expect("encode v7 report");
-    out
+    report.abi_encode().expect("encode v7 report")
 }
 
 async fn get_oracle_price_value(banks: &mut solana_program_test::BanksClient, oracle_prices_pk: Pubkey) -> u64 {
@@ -96,18 +94,25 @@ async fn get_oracle_price_value(banks: &mut solana_program_test::BanksClient, or
     u64::from_le_bytes(data[price_value_offset..price_value_offset + 8].try_into().unwrap())
 }
 
-fn add_zeroed_account(pt: &mut ProgramTest, pubkey: Pubkey, space: usize, owner: Pubkey) {
-    let lamports = 10_000_000_000; // plenty for tests
-    pt.add_account(
-        pubkey,
-        Account {
-            lamports,
-            data: vec![0u8; 8 + space], // include 8 bytes for Anchor discriminator
-            owner,
-            executable: false,
-            rent_epoch: 0,
-        },
+async fn create_program_owned_account(
+    banks: &mut solana_program_test::BanksClient,
+    payer: &Keypair,
+    recent_blockhash: solana_sdk::hash::Hash,
+    keypair: &Keypair,
+    space: usize,
+    owner: Pubkey,
+) {
+    let lamports = 1_000_000_000; // rent exempt for tests
+    let ix = solana_sdk::system_instruction::create_account(
+        &payer.pubkey(),
+        &keypair.pubkey(),
+        lamports,
+        (8 + space) as u64,
+        &owner,
     );
+    let mut tx = Transaction::new_with_payer(&[ix], Some(&payer.pubkey()));
+    tx.sign(&[payer, keypair], recent_blockhash);
+    banks.process_transaction(tx).await.unwrap();
 }
 
 #[tokio::test]
@@ -134,10 +139,10 @@ async fn poc_pre_write_last_writer_wins() {
     let oracle_twaps_pk = Keypair::new();
     let token_metadatas_pk = Keypair::new();
 
-    add_zeroed_account(&mut pt, oracle_mappings_pk.pubkey(), ORACLE_MAPPING_SIZE, scope_program::id());
-    add_zeroed_account(&mut pt, oracle_prices_pk.pubkey(), ORACLE_PRICES_SIZE, scope_program::id());
-    add_zeroed_account(&mut pt, oracle_twaps_pk.pubkey(), ORACLE_TWAPS_SIZE, scope_program::id());
-    add_zeroed_account(&mut pt, token_metadatas_pk.pubkey(), TOKEN_METADATA_SIZE, scope_program::id());
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_mappings_pk, ORACLE_MAPPING_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_prices_pk, ORACLE_PRICES_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_twaps_pk, ORACLE_TWAPS_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &token_metadatas_pk, TOKEN_METADATA_SIZE, scope_program::id()).await;
 
     // Add unchecked verifier-related accounts with fixed addresses
     pt.add_account(
@@ -169,7 +174,7 @@ async fn poc_pre_write_last_writer_wins() {
     };
 
     let mut tx = Transaction::new_with_payer(&[init_ix], Some(&payer.pubkey()));
-    tx.sign(&[&payer, &oracle_mappings_pk, &oracle_prices_pk, &oracle_twaps_pk, &token_metadatas_pk], recent_blockhash);
+    tx.sign(&[&payer], recent_blockhash);
     banks.process_transaction(tx).await.unwrap();
 
     // Create a dummy feed id account to use as mapping.pubkey
@@ -290,10 +295,10 @@ async fn poc_cpi_overwrite_inside_verifier() {
     let oracle_twaps_pk = Keypair::new();
     let token_metadatas_pk = Keypair::new();
 
-    add_zeroed_account(&mut pt, oracle_mappings_pk.pubkey(), ORACLE_MAPPING_SIZE, scope_program::id());
-    add_zeroed_account(&mut pt, oracle_prices_pk.pubkey(), ORACLE_PRICES_SIZE, scope_program::id());
-    add_zeroed_account(&mut pt, oracle_twaps_pk.pubkey(), ORACLE_TWAPS_SIZE, scope_program::id());
-    add_zeroed_account(&mut pt, token_metadatas_pk.pubkey(), TOKEN_METADATA_SIZE, scope_program::id());
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_mappings_pk, ORACLE_MAPPING_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_prices_pk, ORACLE_PRICES_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_twaps_pk, ORACLE_TWAPS_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &token_metadatas_pk, TOKEN_METADATA_SIZE, scope_program::id()).await;
 
     pt.add_account(
         VERIFIER_CONFIG_PUBKEY,
@@ -323,7 +328,7 @@ async fn poc_cpi_overwrite_inside_verifier() {
         data: scope_program::instruction::Initialize { feed_name: feed_name.clone() }.data(),
     };
     let mut tx = Transaction::new_with_payer(&[init_ix], Some(&payer.pubkey()));
-    tx.sign(&[&payer, &oracle_mappings_pk, &oracle_prices_pk, &oracle_twaps_pk, &token_metadatas_pk], recent_blockhash);
+    tx.sign(&[&payer], recent_blockhash);
     banks.process_transaction(tx).await.unwrap();
 
     // Dummy feed id account
