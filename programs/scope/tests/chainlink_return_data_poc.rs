@@ -13,13 +13,13 @@ use scope::utils::consts::{ORACLE_MAPPING_SIZE, ORACLE_PRICES_SIZE, ORACLE_TWAPS
 use scope::{self as scope_program, utils::pdas};
 use solana_program::program::set_return_data;
 use solana_program::pubkey::Pubkey;
-use solana_program::sysvar;
 use solana_program_test::{processor, ProgramTest};
 use solana_sdk::account::Account;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::system_program;
 use solana_sdk::transaction::Transaction;
+use solana_sdk::rent::Rent;
 
 // Hardcode a deterministic attacker writer program id for tests
 const ATTACKER_WRITER_ID: &str = "AttackerWriter11111111111111111111111111111";
@@ -102,7 +102,7 @@ async fn create_program_owned_account(
     space: usize,
     owner: Pubkey,
 ) {
-    let lamports = 1_000_000_000; // rent exempt for tests
+    let lamports = Rent::default().minimum_balance(8 + space);
     let ix = solana_sdk::system_instruction::create_account(
         &payer.pubkey(),
         &keypair.pubkey(),
@@ -131,7 +131,7 @@ async fn poc_pre_write_last_writer_wins() {
         processor!(attacker_writer_process_instruction),
     );
 
-    // Pre-create zeroed big accounts required by initialize
+    // Prepare accounts for initialize
     let feed_name = "test-feed".to_string();
     let (configuration_pk, _bump) = pdas::config_pubkey(&feed_name);
     let oracle_mappings_pk = Keypair::new();
@@ -139,10 +139,7 @@ async fn poc_pre_write_last_writer_wins() {
     let oracle_twaps_pk = Keypair::new();
     let token_metadatas_pk = Keypair::new();
 
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_mappings_pk, ORACLE_MAPPING_SIZE, scope_program::id()).await;
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_prices_pk, ORACLE_PRICES_SIZE, scope_program::id()).await;
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_twaps_pk, ORACLE_TWAPS_SIZE, scope_program::id()).await;
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &token_metadatas_pk, TOKEN_METADATA_SIZE, scope_program::id()).await;
+    // Will be created after starting the test via system create_account
 
     // Add unchecked verifier-related accounts with fixed addresses
     pt.add_account(
@@ -156,8 +153,12 @@ async fn poc_pre_write_last_writer_wins() {
 
     let (mut banks, payer, recent_blockhash) = pt.start().await;
 
-    // Initialize feed
+    // Initialize feed: first create backing accounts on-chain (required by #[account(zero)])
     let admin = Keypair::from_bytes(&payer.to_bytes()).unwrap();
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &oracle_mappings_pk, ORACLE_MAPPING_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &oracle_prices_pk, ORACLE_PRICES_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &oracle_twaps_pk, ORACLE_TWAPS_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &token_metadatas_pk, TOKEN_METADATA_SIZE, scope_program::id()).await;
     let init_ix = Instruction {
         program_id: scope_program::id(),
         accounts: scope_program::accounts::Initialize {
@@ -295,10 +296,7 @@ async fn poc_cpi_overwrite_inside_verifier() {
     let oracle_twaps_pk = Keypair::new();
     let token_metadatas_pk = Keypair::new();
 
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_mappings_pk, ORACLE_MAPPING_SIZE, scope_program::id()).await;
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_prices_pk, ORACLE_PRICES_SIZE, scope_program::id()).await;
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &oracle_twaps_pk, ORACLE_TWAPS_SIZE, scope_program::id()).await;
-    create_program_owned_account(&mut pt.banks, &pt.payer, pt.recent_blockhash, &token_metadatas_pk, TOKEN_METADATA_SIZE, scope_program::id()).await;
+    // Will be created after starting the test via system create_account
 
     pt.add_account(
         VERIFIER_CONFIG_PUBKEY,
@@ -312,7 +310,7 @@ async fn poc_cpi_overwrite_inside_verifier() {
     let (mut banks, payer, recent_blockhash) = pt.start().await;
     let admin = Keypair::from_bytes(&payer.to_bytes()).unwrap();
 
-    // Initialize
+    // Initialize: first create backing accounts on-chain (required by #[account(zero)])
     let init_ix = Instruction {
         program_id: scope_program::id(),
         accounts: scope_program::accounts::Initialize {
@@ -327,6 +325,10 @@ async fn poc_cpi_overwrite_inside_verifier() {
         .to_account_metas(None),
         data: scope_program::instruction::Initialize { feed_name: feed_name.clone() }.data(),
     };
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &oracle_mappings_pk, ORACLE_MAPPING_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &oracle_prices_pk, ORACLE_PRICES_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &oracle_twaps_pk, ORACLE_TWAPS_SIZE, scope_program::id()).await;
+    create_program_owned_account(&mut banks, &payer, recent_blockhash, &token_metadatas_pk, TOKEN_METADATA_SIZE, scope_program::id()).await;
     let mut tx = Transaction::new_with_payer(&[init_ix], Some(&payer.pubkey()));
     tx.sign(&[&payer], recent_blockhash);
     banks.process_transaction(tx).await.unwrap();
