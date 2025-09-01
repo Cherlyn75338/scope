@@ -1,0 +1,37 @@
+[package]
+name = "chainlink-return-data-poc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anchor-lang = "0.28.0"
+anchor-spl = "0.28.0"
+solana-program = "1.16.18"
+solana-sdk = "1.16.18"
+solana-program-test = "1.16.18"
+solana-logger = "1.16.18"
+spl-token = "3.5.0"
+bytemuck = { version = "1.4.0", features = ["min_const_generics", "derive"] }
+chainlink-streams-report = { git = "https://github.com/smartcontractkit/data-streams-sdk.git", package = "chainlink-data-streams-report" }
+num-bigint = "0.4"
+hex = "0.4"
+borsh = "0.10"
+
+# Include the scope program as a dependency
+scope = { path = "../programs/scope", features = ["no-entrypoint", "cpi"] }
+
+[dev-dependencies]
+tokio = { version = "1.32", features = ["full"] }
+env_logger = "0.10"
+
+[[bin]]
+name = "attacker_program"
+path = "src/attacker_program.rs"
+
+[[bin]]
+name = "mock_chainlink_verifier"
+path = "src/mock_chainlink_verifier.rs"
+
+[[test]]
+name = "exploit_test"
+path = "tests/exploit_test.rs"
