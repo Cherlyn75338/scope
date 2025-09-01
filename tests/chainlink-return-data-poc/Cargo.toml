@@ -1,0 +1,51 @@
+[package]
+name = "chainlink-return-data-poc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Anchor framework
+anchor-lang = "0.28.0"
+anchor-spl = "0.28.0"
+
+# Solana SDK and testing
+solana-program = "1.16.18"
+solana-sdk = "1.16.18"
+solana-program-test = "1.16.18"
+
+# Scope program (the vulnerable target)
+scope = { path = "../../programs/scope", features = ["no-entrypoint", "cpi"] }
+
+# Chainlink dependencies for creating forged reports
+chainlink-streams-report = { git = "https://github.com/smartcontractkit/data-streams-sdk.git", package = "chainlink-data-streams-report" }
+num-bigint = "0.4"
+
+# Utilities
+bytemuck = { version = "1.4.0", features = ["min_const_generics", "derive"] }
+tokio = { version = "1", features = ["full"] }
+borsh = "0.10.3"
+
+[dev-dependencies]
+# Additional test utilities
+pretty_assertions = "1.3"
+env_logger = "0.10"
+
+[[bin]]
+name = "attacker_program"
+path = "attacker_program.rs"
+
+[[test]]
+name = "chainlink_exploit"
+path = "chainlink_return_data_exploit_test.rs"
+
+[lib]
+name = "test_helpers"
+path = "test_helpers.rs"
+
+[features]
+default = []
+verbose = []
+
+[profile.test]
+opt-level = 2
+overflow-checks = true
