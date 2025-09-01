@@ -75,6 +75,16 @@ pub mod scope {
         )
     }
 
+    #[cfg(not(feature = "pyth-lazer"))]
+    pub fn refresh_pyth_lazer_price<'info>(
+        _ctx: Context<'_, '_, '_, 'info, RefreshPythLazerPrice<'info>>,
+        _tokens: Vec<u16>,
+        _serialized_pyth_message: Vec<u8>,
+        _ed25519_instruction_index: u16,
+    ) -> Result<()> {
+        Err(error!(ScopeError::PriceNotValid))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn update_mapping(
         ctx: Context<UpdateOracleMapping>,
