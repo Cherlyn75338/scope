@@ -1,0 +1,51 @@
+name: Chainlink Return-Data PoC (BPF)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  poc-tests-bpf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Install Solana 1.16.18
+        shell: bash
+        run: |
+          bash -c "$(curl -sSfL https://release.anza.xyz/v1.16.18/solana-install-init-x86_64-unknown-linux-gnu)"
+          echo "$HOME/.local/share/solana/install/releases/1.16.18/solana-release/bin" >> $GITHUB_PATH || true
+          echo "$HOME/.local/share/solana/install/releases/v1.16.18/solana-release/bin" >> $GITHUB_PATH || true
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH || true
+          solana --version
+
+      - name: Pin yvaults to stub
+        shell: bash
+        run: |
+          sed -n '1,120p' programs/scope/Cargo.toml | sed 's#^yvaults = { git =.*#yvaults = { path = "../yvaults_stub", package = "yvaults_stub", optional = true }#' > /tmp/_scope_cargo.toml
+          tail -n +121 programs/scope/Cargo.toml >> /tmp/_scope_cargo.toml
+          mv /tmp/_scope_cargo.toml programs/scope/Cargo.toml
+          grep -n "yvaults = { path = \"../yvaults_stub\"" -n programs/scope/Cargo.toml
+
+      - name: Build BPF .so for scope
+        shell: bash
+        run: |
+          cargo build-bpf --manifest-path=programs/scope/Cargo.toml --features devnet
+
+      - name: Run PoC tests under BPF
+        env:
+          BPF_OUT_DIR: target/deploy
+        shell: bash
+        run: |
+          cargo test -p scope --features devnet --test chainlink_return_data_poc -- --nocapture
+
