@@ -10,6 +10,7 @@ pub mod chainlink;
 pub mod discount_to_maturity;
 pub mod flashtrade_lp;
 pub mod jito_restaking;
+#[cfg(feature = "pyth")]
 pub mod jupiter_lp;
 pub mod meteora_dlmm;
 pub mod most_recent_of;
@@ -293,12 +294,15 @@ where
             panic!("yvaults feature is not enabled, KToken oracle type is not available")
         }
         OracleType::MsolStake => msol_stake::get_price(base_account, clock).map_err(Into::into),
+        #[cfg(feature = "pyth")]
         OracleType::JupiterLpFetch => {
             jupiter_lp::get_price_no_recompute(base_account, clock, extra_accounts).map_err(|e| {
                 warn!("Error getting Jupiter LP price: {:?}", e);
                 e
             })
         }
+        #[cfg(not(feature = "pyth"))]
+        OracleType::JupiterLpFetch => return err!(ScopeError::PriceNotValid),
         OracleType::ScopeTwap => twap::get_price(oracle_mappings, oracle_twaps, index, clock)
             .map_err(|e| {
                 warn!("Error getting Scope TWAP price: {:?}", e);
@@ -318,9 +322,13 @@ where
         OracleType::MeteoraDlmmBtoA => {
             meteora_dlmm::get_price(false, base_account, clock, extra_accounts)
         }
+        #[cfg(feature = "pyth")]
         OracleType::JupiterLpCompute => {
             jupiter_lp::get_price_recomputed(base_account, clock, extra_accounts)
         }
+        #[cfg(not(feature = "pyth"))]
+        OracleType::JupiterLpCompute => return err!(ScopeError::PriceNotValid),
+        #[cfg(feature = "pyth")]
         OracleType::JupiterLpScope => jupiter_lp::get_price_recomputed_scope(
             index,
             base_account,
@@ -329,6 +337,8 @@ where
             oracle_prices.load()?.deref(),
             extra_accounts,
         ),
+        #[cfg(not(feature = "pyth"))]
+        OracleType::JupiterLpScope => return err!(ScopeError::PriceNotValid),
         OracleType::FixedPrice => {
             let mut price_data: &[u8] = &oracle_mappings.generic[index];
             let price = AnchorDeserialize::deserialize(&mut price_data).unwrap();

@@ -60,6 +60,7 @@ pub mod scope {
 
     /// IMPORTANT: we assume the tokens passed in to this ix are in the same order in which
     /// they are found in the message payload. Thus, we rely on the client to do this work
+    #[cfg(feature = "pyth-lazer")]
     pub fn refresh_pyth_lazer_price<'info>(
         ctx: Context<'_, '_, '_, 'info, RefreshPythLazerPrice<'info>>,
         tokens: Vec<u16>,
