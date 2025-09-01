@@ -62,3 +62,40 @@ async fn test_verifier_overwrite_still_allows_attacker_if_last_writer_not_verifi
     assert!(res.is_ok(), "attacker data was last-writer before harness; harness accepted");
 }
 
+#[tokio::test]
+async fn test_last_writer_overwrites_verifier_data() {
+    // Simulate: verifier sets return data, but a later program overwrites it, then harness runs
+    let harness_id = scope_harness::id();
+    let injector_id = Pubkey::new_from_array([9u8;32]);
+    let verifier_id = verifier_stub::id();
+
+    let mut pt = ProgramTest::new("scope_harness", harness_id, processor!(scope_harness::entry));
+    pt.add_program("malicious_injector", injector_id, processor!(malicious_injector::entry));
+    pt.add_program("verifier_stub", verifier_id, processor!(verifier_stub::entry));
+
+    let (mut banks_client, payer, recent_blockhash) = pt.start().await;
+
+    // Step 1: call verifier that sets return data to some genuine-looking bytes
+    let verifier_bytes = vec![0xAA; 16];
+    let ix_verifier = Instruction {
+        program_id: verifier_id,
+        accounts: vec![],
+        data: verifier_stub::instruction::VerifyWithReturnData { data: verifier_bytes }.data(),
+    };
+
+    // Step 2: attacker overwrites return data
+    let attacker_bytes = vec![7,7,7,7,7];
+    let ix_overwrite = Instruction {
+        program_id: injector_id,
+        accounts: vec![],
+        data: malicious_injector::instruction::SetReturnDataOnly { ix_data: attacker_bytes.clone() }.data(),
+    };
+
+    // Step 3: harness reads last-writer data (attacker)
+    let ix_harness = Instruction { program_id: harness_id, accounts: vec![], data: vec![0] };
+
+    let tx = Transaction::new_signed_with_payer(&[ix_verifier, ix_overwrite, ix_harness], Some(&payer.pubkey()), &[&payer], recent_blockhash);
+    let res = banks_client.process_transaction(tx).await;
+    assert!(res.is_ok(), "attacker overwrote after verifier; harness accepted attacker bytes");
+}
+
