@@ -4,7 +4,7 @@ use decimal_wad::{
 };
 use raydium_amm_v3::libraries::U256;
 use solana_program::clock;
-use yvaults::utils::FULL_BPS;
+use crate::utils::consts::FULL_BPS;
 
 use crate::{Price, ScopeError, ScopeResult};
 

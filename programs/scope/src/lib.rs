@@ -60,6 +60,7 @@ pub mod scope {
 
     /// IMPORTANT: we assume the tokens passed in to this ix are in the same order in which
     /// they are found in the message payload. Thus, we rely on the client to do this work
+    #[cfg(feature = "pyth-lazer")]
     pub fn refresh_pyth_lazer_price<'info>(
         ctx: Context<'_, '_, '_, 'info, RefreshPythLazerPrice<'info>>,
         tokens: Vec<u16>,
@@ -72,6 +73,16 @@ pub mod scope {
             serialized_pyth_message,
             ed25519_instruction_index,
         )
+    }
+
+    #[cfg(not(feature = "pyth-lazer"))]
+    pub fn refresh_pyth_lazer_price<'info>(
+        _ctx: Context<'_, '_, '_, 'info, RefreshPythLazerPrice<'info>>,
+        _tokens: Vec<u16>,
+        _serialized_pyth_message: Vec<u8>,
+        _ed25519_instruction_index: u16,
+    ) -> Result<()> {
+        Err(error!(ScopeError::PriceNotValid))
     }
 
     #[allow(clippy::too_many_arguments)]

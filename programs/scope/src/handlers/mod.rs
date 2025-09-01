@@ -4,6 +4,7 @@ pub mod handler_create_mint_map;
 pub mod handler_initialize;
 pub mod handler_refresh_chainlink_price;
 pub mod handler_refresh_prices;
+#[cfg(feature = "pyth-lazer")]
 pub mod handler_refresh_pyth_lazer_price;
 pub mod handler_reset_twap;
 pub mod handler_set_admin_cached;
@@ -16,6 +17,7 @@ pub use handler_create_mint_map::*;
 pub use handler_initialize::*;
 pub use handler_refresh_chainlink_price::*;
 pub use handler_refresh_prices::*;
+#[cfg(feature = "pyth-lazer")]
 pub use handler_refresh_pyth_lazer_price::*;
 pub use handler_reset_twap::*;
 pub use handler_set_admin_cached::*;
