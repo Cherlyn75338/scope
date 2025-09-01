@@ -236,14 +236,6 @@ async fn poc_pre_write_last_writer_wins() {
     // Instruction 1: Call refresh_chainlink_price; verifier will not set return data (mode=0)
     // signed_report payload: [mode=0]
     let mut signed_report = vec![0u8];
-    let chainlink_verify_ix = chainlink_itf::verify(
-        &VERIFIER_PROGRAM_ID,
-        &VERIFIER_CONFIG_PUBKEY,
-        &chainlink_itf::ACCESS_CONTROLLER_PUBKEY,
-        &admin.pubkey(),
-        &Pubkey::default(), // config account unchecked in our mock
-        signed_report,
-    );
 
     let refresh_ix = Instruction {
         program_id: scope_program::id(),
@@ -260,7 +252,7 @@ async fn poc_pre_write_last_writer_wins() {
         .to_account_metas(None),
         data: scope_program::instruction::RefreshChainlinkPrice {
             token: 0,
-            serialized_chainlink_report: chainlink_verify_ix.data, // forward the verify() instruction data as the "serialized report"
+            serialized_chainlink_report: signed_report, // pass only the signed_report; handler constructs the verify ix
         }
         .data(),
     };
@@ -387,14 +379,6 @@ async fn poc_cpi_overwrite_inside_verifier() {
     let mut signed_report = Vec::with_capacity(1 + report_bytes.len());
     signed_report.push(1u8);
     signed_report.extend_from_slice(&report_bytes);
-    let chainlink_verify_ix = chainlink_itf::verify(
-        &VERIFIER_PROGRAM_ID,
-        &VERIFIER_CONFIG_PUBKEY,
-        &chainlink_itf::ACCESS_CONTROLLER_PUBKEY,
-        &admin.pubkey(),
-        &Pubkey::default(),
-        signed_report,
-    );
 
     let refresh_ix = Instruction {
         program_id: scope_program::id(),
@@ -411,7 +395,7 @@ async fn poc_cpi_overwrite_inside_verifier() {
         .to_account_metas(None),
         data: scope_program::instruction::RefreshChainlinkPrice {
             token: 0,
-            serialized_chainlink_report: chainlink_verify_ix.data,
+            serialized_chainlink_report: signed_report,
         }
         .data(),
     };
