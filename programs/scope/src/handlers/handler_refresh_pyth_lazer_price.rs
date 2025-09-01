@@ -1,3 +1,4 @@
+#![cfg(feature = "pyth-lazer")]
 use anchor_lang::{prelude::*, InstructionData};
 use pyth_lazer_protocol::{message::SolanaMessage, payload::PayloadData};
 use pyth_lazer_solana_contract::{

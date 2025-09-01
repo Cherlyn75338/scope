@@ -15,15 +15,21 @@ pub mod meteora_dlmm;
 pub mod most_recent_of;
 pub mod msol_stake;
 pub mod orca_whirlpool;
+#[cfg(feature = "pyth")]
 pub mod pyth;
+#[cfg(feature = "pyth")]
 pub mod pyth_ema;
+#[cfg(feature = "pyth-lazer")]
 pub mod pyth_lazer;
+#[cfg(feature = "pyth-pull")]
 pub mod pyth_pull;
+#[cfg(feature = "pyth-pull")]
 pub mod pyth_pull_ema;
 pub mod raydium_ammv3;
 pub mod redstone;
 pub mod securitize;
 pub mod spl_stake;
+#[cfg(feature = "sbod")]
 pub mod switchboard_on_demand;
 pub mod switchboard_v2;
 pub mod twap;
@@ -222,20 +228,33 @@ where
     'a: 'b,
 {
     let price = match price_type {
+        #[cfg(feature = "pyth")]
         OracleType::Pyth => pyth::get_price(base_account, clock),
+        #[cfg(not(feature = "pyth"))]
+        OracleType::Pyth => return err!(ScopeError::PriceNotValid),
+        #[cfg(feature = "pyth-pull")]
         OracleType::PythPull => pyth_pull::get_price(base_account, clock),
+        #[cfg(not(feature = "pyth-pull"))]
+        OracleType::PythPull => return err!(ScopeError::PriceNotValid),
+        #[cfg(feature = "pyth-pull")]
         OracleType::PythPullEMA => pyth_pull_ema::get_price(base_account, clock),
+        #[cfg(not(feature = "pyth-pull"))]
+        OracleType::PythPullEMA => return err!(ScopeError::PriceNotValid),
         OracleType::SwitchboardV2 => switchboard_v2::get_price(base_account).map_err(Into::into),
-        OracleType::SwitchboardOnDemand => {
-            switchboard_on_demand::get_price(base_account, clock).map_err(Into::into)
-        }
+        #[cfg(feature = "sbod")]
+        OracleType::SwitchboardOnDemand => switchboard_on_demand::get_price(base_account, clock).map_err(Into::into),
+        #[cfg(not(feature = "sbod"))]
+        OracleType::SwitchboardOnDemand => return err!(ScopeError::PriceNotValid),
         OracleType::CToken => ctokens::get_price(base_account, clock),
         OracleType::SplStake => spl_stake::get_price(base_account, clock),
         #[cfg(not(feature = "yvaults"))]
         OracleType::KToken => {
             panic!("yvaults feature is not enabled, KToken oracle type is not available")
         }
+        #[cfg(feature = "pyth")]
         OracleType::PythEMA => pyth_ema::get_price(base_account, clock),
+        #[cfg(not(feature = "pyth"))]
+        OracleType::PythEMA => return err!(ScopeError::PriceNotValid),
         #[cfg(feature = "yvaults")]
         OracleType::KToken => {
             ktokens::get_price(base_account, clock, extra_accounts).map_err(|e| {
@@ -345,10 +364,13 @@ where
             let dated_price = oracle_prices.prices[index];
             redstone::get_price(base_account, &dated_price, clock).map_err(Into::into)
         }
+        #[cfg(feature = "pyth-lazer")]
         OracleType::PythLazer => {
             msg!("PythLazer oracle type cannot be refreshed directly");
             return err!(ScopeError::PriceNotValid);
         }
+        #[cfg(not(feature = "pyth-lazer"))]
+        OracleType::PythLazer => return err!(ScopeError::PriceNotValid),
         OracleType::CappedFloored => capped_floored::get_price(
             oracle_prices.load()?.deref(),
             &oracle_mappings.generic[index],
@@ -392,19 +414,32 @@ pub fn validate_oracle_cfg(
     }
 
     match price_type {
+        #[cfg(feature = "pyth")]
         OracleType::Pyth => pyth::validate_pyth_price_info(price_account),
+        #[cfg(not(feature = "pyth"))]
+        OracleType::Pyth => return err!(ScopeError::PriceNotValid),
+        #[cfg(feature = "pyth-pull")]
         OracleType::PythPull => pyth_pull::validate_price_update_v2_info(price_account),
+        #[cfg(not(feature = "pyth-pull"))]
+        OracleType::PythPull => return err!(ScopeError::PriceNotValid),
+        #[cfg(feature = "pyth-pull")]
         OracleType::PythPullEMA => pyth_pull::validate_price_update_v2_info(price_account),
-        OracleType::SwitchboardOnDemand => {
-            switchboard_on_demand::validate_price_account(price_account)
-        }
+        #[cfg(not(feature = "pyth-pull"))]
+        OracleType::PythPullEMA => return err!(ScopeError::PriceNotValid),
+        #[cfg(feature = "sbod")]
+        OracleType::SwitchboardOnDemand => switchboard_on_demand::validate_price_account(price_account),
+        #[cfg(not(feature = "sbod"))]
+        OracleType::SwitchboardOnDemand => return err!(ScopeError::PriceNotValid),
         OracleType::SwitchboardV2 => Ok(()), // TODO at least check account ownership?
         OracleType::CToken => Ok(()),        // TODO how shall we validate ctoken account?
         OracleType::SplStake => Ok(()),
         OracleType::KToken => Ok(()), // TODO, should validate ownership of the ktoken account
         OracleType::KTokenToTokenA => Ok(()), // TODO, should validate ownership of the ktoken account
         OracleType::KTokenToTokenB => Ok(()), // TODO, should validate ownership of the ktoken account
+        #[cfg(feature = "pyth")]
         OracleType::PythEMA => pyth::validate_pyth_price_info(price_account),
+        #[cfg(not(feature = "pyth"))]
+        OracleType::PythEMA => return err!(ScopeError::PriceNotValid),
         OracleType::MsolStake => Ok(()),
         OracleType::JupiterLpFetch | OracleType::JupiterLpCompute | OracleType::JupiterLpScope => {
             jupiter_lp::validate_jlp_pool(price_account)
@@ -453,9 +488,10 @@ pub fn validate_oracle_cfg(
             most_recent_of::validate_mapping_cfg(price_account, generic_data).map_err(Into::into)
         }
         OracleType::RedStone => redstone::validate_price_account(price_account).map_err(Into::into),
-        OracleType::PythLazer => {
-            pyth_lazer::validate_mapping_cfg(price_account, generic_data).map_err(Into::into)
-        }
+        #[cfg(feature = "pyth-lazer")]
+        OracleType::PythLazer => pyth_lazer::validate_mapping_cfg(price_account, generic_data).map_err(Into::into),
+        #[cfg(not(feature = "pyth-lazer"))]
+        OracleType::PythLazer => return err!(ScopeError::PriceNotValid),
         OracleType::CappedFloored => {
             capped_floored::validate_mapping_cfg(price_account, generic_data).map_err(Into::into)
         }

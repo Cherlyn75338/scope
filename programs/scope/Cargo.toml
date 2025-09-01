@@ -28,12 +28,10 @@ localnet = []
 mainnet = []
 staging = []
 serde = ["dep:serde"]
+pyth = []
+pyth-pull = ["dep:pyth-solana-receiver-sdk"]
+pyth-lazer = ["dep:pyth-lazer-solana-contract", "dep:pyth-lazer-protocol"]
 sbod = ["dep:sbod-itf"]
-pyth-lazer = [
-    "dep:pyth-lazer-solana-contract",
-    "dep:pyth-lazer-protocol",
-    "dep:pyth-solana-receiver-sdk",
-]
 
 [dependencies]
 anchor-lang = "0.28.0"
