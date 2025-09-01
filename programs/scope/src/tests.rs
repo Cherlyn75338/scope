@@ -119,6 +119,16 @@ async fn test_return_data_confusion_chainlink_handler() {
     let tx = Transaction::new_signed_with_payer(&[upd_ix], Some(&payer.pubkey()), &[payer], ctx.last_blockhash);
     ctx.banks_client.process_transaction(tx).await.unwrap();
 
+    // Read and print initial price for token 0
+    let before_acc = ctx.banks_client.get_account(prices.pubkey()).await.unwrap().unwrap();
+    let data_before = before_acc.data;
+    let entry_size: usize = 56; // Price{u64,u64}=16 + last_updated_slot(8) + unix_ts(8) + generic(24)
+    let base_offset: usize = 32; // oracle_mappings Pubkey
+    let offset = base_offset + (usize::from(token_index) * entry_size);
+    let before_value = u64::from_le_bytes(data_before[offset..offset+8].try_into().unwrap());
+    let before_exp = u64::from_le_bytes(data_before[offset+8..offset+16].try_into().unwrap());
+    println!("Before: token {} price value={} exp={}", token_index, before_value, before_exp);
+
     // 1) Injector ix: sets crafted ReportDataV3 return data with matching feed id
     let price_val: u64 = 1_000_000_000; // 10 with 8 decimals
     let ts: u64 = 1_000_000_000; // arbitrary > 0
@@ -154,6 +164,15 @@ async fn test_return_data_confusion_chainlink_handler() {
     let tx = Transaction::new_signed_with_payer(&[inj_ix, refresh_ix], Some(&payer.pubkey()), &[payer], ctx.last_blockhash);
     let res = ctx.banks_client.process_transaction(tx).await;
     assert!(res.is_ok(), "refresh should succeed to test data flow: {:?}", res);
+
+    // Read and print updated price for token 0
+    let after_acc = ctx.banks_client.get_account(prices.pubkey()).await.unwrap().unwrap();
+    let data_after = after_acc.data;
+    let after_value = u64::from_le_bytes(data_after[offset..offset+8].try_into().unwrap());
+    let after_exp = u64::from_le_bytes(data_after[offset+8..offset+16].try_into().unwrap());
+    println!("After: token {} price value={} exp={}", token_index, after_value, after_exp);
+
+    assert_ne!(before_value, after_value, "Price value should change due to injected report");
 }
 
 // Advanced “mainnet-realism” probe: ensure the verify CPI writes return data last.
