@@ -21,7 +21,7 @@ tracing = ["dep:tracing"]
 
 # If none of the following is set, one will be selected based on env $CLUSTER variable
 # If $CLUSTER is not set either, default will be mainnet
-default = ["yvaults"]
+default = []
 yvaults = ["dep:yvaults"]
 devnet = ["skip_price_validation"]
 localnet = []
@@ -44,13 +44,14 @@ arrayref = "0.3.6"
 decimal-wad = "0.1.7"
 rust_decimal = "1.18.0"
 # Comment out the line below if you do not have access to the yvaults repo
-yvaults = { git = "ssh://git@github.com/Kamino-Finance/yvaults.git", branch = "scope-public-compat", features = [
-    "no-entrypoint",
-    "cpi",
-    "mainnet",
-], optional = true }
-# Uncomment the line below if you do not have access to the yvaults repo
-#yvaults = { path = "../yvaults_stub", package = "yvaults_stub", optional = true }
+# Comment out the line below if you do not have access to the yvaults repo
+# yvaults = { git = "ssh://git@github.com/Kamino-Finance/yvaults.git", branch = "scope-public-compat", features = [
+#     "no-entrypoint",
+#     "cpi",
+#     "mainnet",
+# ], optional = true }
+# Use local stub when yvaults repo is not available
+yvaults = { path = "../yvaults_stub", package = "yvaults_stub", optional = true }
 sha2 = "0.10.0"
 whirlpool = { git = "https://github.com/Kamino-Finance/whirlpools", branch = "anchor/0.28.0", features = [
     "no-entrypoint",
@@ -75,4 +76,11 @@ chainlink-streams-report = { git = "https://github.com/smartcontractkit/data-str
 num-bigint = "0.4"
 securitize-itf = { path = "../securitize-itf", features = ["no-entrypoint"] }
 flashtrade-perp-itf = { path = "../flashtrade-perp-itf", features = ["no-entrypoint"] }
+
+[dev-dependencies]
+solana-program-test = ">=1.16.18"
+solana-sdk = ">=1.16.18"
+tokio = { version = "1.35", features = ["macros", "rt-multi-thread"] }
+prost = "0.11"
+solana-client = ">=1.16.18"
 

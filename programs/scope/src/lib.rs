@@ -152,3 +152,6 @@ pub mod scope {
         handler_close_mint_map::process(ctx)
     }
 }
+
+#[cfg(test)]
+mod tests;
