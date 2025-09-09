@@ -1,0 +1,14 @@
+[package]
+name = "scope-poc-attacker"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "scope_poc_attacker"
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+solana-program = "1.17.18"
+
+[features]
+no-entrypoint = []

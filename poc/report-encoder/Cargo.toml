@@ -1,0 +1,15 @@
+[package]
+name = "scope-poc-report-encoder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+bs58 = "0.5"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chainlink-streams-report = "0.4.3"
+num-bigint = "0.4"
+
